@@ -90,6 +90,16 @@ ifeq ($(PLATFORM),openwrt)
 	GO_TAGS += openwrt
 endif
 
+ifeq ($(PLATFORM),ubuntu)
+	BIN_DIR := $(ROOT_DIR)/usr/bin
+	ETC_DIR := $(ROOT_DIR)/etc
+	LIB_DIR := $(ROOT_DIR)/lib
+	USRSHARE_DIR := $(ROOT_DIR)/usr/share
+	STATE_DIR := $(ROOT_DIR)/var/lib/magitrickle
+
+	GO_TAGS += ubuntu
+endif
+
 IPK_DIR := $(BUILD_DIR)/ipk
 IPK_CONTROL_DIR := $(IPK_DIR)/control
 
@@ -134,7 +144,7 @@ BUILD_KEY_APK_PUB ?= public-key.pem
 # Targets
 #
 
-.PHONY: _return_export_dynamic_env all clear clean download download_backend download_frontend redownload redownload_backend redownload_frontend build build_backend build_frontend rebuild rebuild_backend rebuild_frontend prepare_files package package_ipk FORCE
+.PHONY: _return_export_dynamic_env all clear clean download download_backend download_frontend redownload redownload_backend redownload_frontend build build_backend build_frontend rebuild rebuild_backend rebuild_frontend prepare_files package package_ipk package_deb test test_backend test_integration test_integration_docker FORCE
 
 all: download build package
 
@@ -232,6 +242,7 @@ rebuild_frontend:
 define _copy_files
 	if [ -d $(1)/_ipk/control ]; then mkdir -p $(IPK_CONTROL_DIR); cp -r $(1)/_ipk/control/* $(IPK_CONTROL_DIR); fi
 	if [ -d $(1)/_apk ]; then mkdir -p $(APK_DIR); cp -r $(1)/_apk/* $(APK_DIR); fi
+	if [ -d $(1)/DEBIAN ]; then mkdir -p $(ROOT_DIR)/DEBIAN; cp -r $(1)/DEBIAN/* $(ROOT_DIR)/DEBIAN; fi
 	if [ -d $(1)/bin ]; then mkdir -p $(BIN_DIR); cp -r $(1)/bin/* $(BIN_DIR); fi
 	if [ -d $(1)/etc ]; then mkdir -p $(ETC_DIR); cp -r $(1)/etc/* $(ETC_DIR); fi
 	if [ -d $(1)/lib ]; then mkdir -p $(LIB_DIR); cp -r $(1)/lib/* $(LIB_DIR); fi
@@ -249,6 +260,7 @@ prepare_files: build
 	$(if $(filter entware,$(PLATFORM)), $(call _copy_files,./files/entware))
 	$(if $(filter entware,$(PLATFORM)), $(if $(filter %_kn,$(TARGET)), $(call _copy_files,./files/entware_kn)))
 	$(if $(filter openwrt,$(PLATFORM)), $(call _copy_files,./files/openwrt))
+	$(if $(filter ubuntu,$(PLATFORM)), $(call _copy_files,./files/ubuntu))
 
 $(BUILD_KEY_APK_SEC):
 	openssl ecparam -name prime256v1 -genkey -noout -out $(BUILD_KEY_APK_SEC)
@@ -263,6 +275,9 @@ ifeq ($(PLATFORM),openwrt)
 endif
 ifeq ($(PLATFORM),entware)
 	$(MAKE) package_ipk
+endif
+ifeq ($(PLATFORM),ubuntu)
+	$(MAKE) package_deb
 endif
 
 package_ipk: prepare_files
@@ -280,14 +295,14 @@ package_ipk: prepare_files
 	echo 'Section: net' >> $(IPK_CONTROL_DIR)/control
 	echo 'Priority: optional' >> $(IPK_CONTROL_DIR)/control
 ifeq ($(PLATFORM),entware)
-	@DEPS="libc, iptables"; \
+	@DEPS="libc, iptables, xtables-addons_legacy"; \
 	if echo "$(TARGET)" | grep -q '_kn$$'; then \
 		DEPS="$$DEPS, socat"; \
 	fi; \
 	echo "Depends: $$DEPS" >> $(IPK_CONTROL_DIR)/control
 endif
 ifeq ($(PLATFORM),openwrt)
-	echo "Depends: libc, iptables-nft, iptables-mod-conntrack-extra, kmod-ipt-nat, kmod-ipt-ipset, ip6tables-nft" >> $(IPK_CONTROL_DIR)/control
+	echo "Depends: libc, iptables-nft, iptables-mod-conntrack-extra, kmod-ipt-nat, kmod-ipt-ipset, ip6tables-nft, kmod-nfnetlink, kmod-nfnetlink-queue, kmod-ipt-nfqueue, kmod-nf-conntrack" >> $(IPK_CONTROL_DIR)/control
 endif
 
 	tar -C "$(IPK_CONTROL_DIR)" -czvf "$(IPK_DIR)/control.tar.gz" --owner=0 --group=0 .
@@ -320,7 +335,7 @@ package_apk: prepare_files $(BUILD_KEY_APK_SEC)
 		-I "maintainer:$(PKG_MAINTAINER)" \
 		-I "url:$(PKG_URL)" \
 		-I "provider-priority:100" \
-		-I "depends:libc iptables-nft iptables-mod-conntrack-extra kmod-ipt-nat kmod-ipt-ipset ip6tables-nft" \
+		-I "depends:libc iptables-nft iptables-mod-conntrack-extra kmod-ipt-nat kmod-ipt-ipset ip6tables-nft kmod-nfnetlink kmod-nfnetlink-queue kmod-ipt-nfqueue kmod-nf-conntrack" \
 		-s "post-install:$(APK_DIR)/post-install.sh" \
 		-s "pre-deinstall:$(APK_DIR)/pre-deinstall.sh" \
 		-s "post-upgrade:$(APK_DIR)/post-upgrade.sh" \
@@ -328,4 +343,49 @@ package_apk: prepare_files $(BUILD_KEY_APK_SEC)
 		-o "$(BUILDS_DIR)/$(PKG_NAME)_$(PKG_VERSION_APK)-r$(PKG_REVISION)_$(UNIQUE_NAME).apk" \
 		--sign "$(BUILD_KEY_APK_SEC)"
 
+package_deb: prepare_files
+	@if [ ! -d $(ROOT_DIR)/DEBIAN ]; then \
+		echo "ERROR: $(ROOT_DIR)/DEBIAN not found; ensure files/ubuntu/DEBIAN exists." >&2; \
+		exit 1; \
+	fi
+
+	# Render placeholders in DEBIAN/control
+	@for f in $(ROOT_DIR)/DEBIAN/control $(wildcard $(ROOT_DIR)/DEBIAN/templates/*); do \
+		if [ -f $$f ]; then \
+			sed -i \
+				-e 's|__VERSION__|$(PKG_VERSION)|g' \
+				-e 's|__REVISION__|$(PKG_REVISION)|g' \
+				-e 's|__ARCH__|$(TARGET)|g' \
+				-e 's|__MAINTAINER__|$(PKG_MAINTAINER)|g' \
+				-e 's|__DESCRIPTION__|$(PKG_DESCRIPTION)|g' \
+				-e 's|__URL__|$(PKG_URL)|g' \
+				-e 's|__LICENSE__|$(PKG_LICENSE)|g' \
+				$$f; \
+		fi \
+	done
+
+	# Make scripts executable
+	@find $(ROOT_DIR)/DEBIAN -maxdepth 1 -type f \( -name 'postinst' -o -name 'preinst' -o -name 'prerm' -o -name 'postrm' \) -exec chmod 0755 {} \;
+
+	# Build .deb
+	@mkdir -p "$(BUILDS_DIR)"
+	dpkg-deb --build --root-owner-group "$(ROOT_DIR)" "$(BUILDS_DIR)/$(PKG_NAME)_$(PKG_VERSION)_$(UNIQUE_NAME).deb"
+
 FORCE:
+
+test: test_backend
+
+# Run unit tests only (no kernel-side dependencies). Default on any host.
+test_backend:
+	cd src/backend && go test -count=1 ./...
+
+# Run the SNI-sniffer integration test (requires Linux + root + ip_set +
+# xt_NFQUEUE). Skips automatically on hosts without the prerequisites.
+test_integration:
+	cd src/backend && go test -tags=integration -count=1 -v -timeout 60s ./tests/sniffer_integ/...
+
+# Build the integration Docker image and run the test inside. Requires
+# Docker with --privileged support enabled.
+test_integration_docker:
+	docker build -f Dockerfile.e2e -t magitrickle-e2e .
+	docker run --rm --privileged --network host magitrickle-e2e

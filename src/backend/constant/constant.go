@@ -9,7 +9,7 @@ import (
 var DefaultAppConfig = models.AppConfig{
 	DNSProxy: models.AppConfigDNSProxy{
 		Host:            models.AppConfigDNSProxyServer{Address: "[::]", Port: 3553},
-		Upstream:        models.AppConfigDNSProxyServer{Address: "127.0.0.1", Port: 53},
+		Upstream:        models.AppConfigDNSProxyServer{Address: DefaultDNSUpstreamAddress, Port: DefaultDNSUpstreamPort},
 		DisableRemap53:  false,
 		DisableFakePTR:  false,
 		DisableDropAAAA: false,
@@ -41,8 +41,19 @@ var DefaultAppConfig = models.AppConfig{
 		StartMarkTableIndex: 0x4D616769, // Magi
 	},
 	Link:              []string{"br0"},
-	ShowAllInterfaces: false,
+	ShowAllInterfaces: DefaultShowAllInterfaces,
 	LogLevel:          "info",
+	SNISniffer: models.AppConfigSNISniffer{
+		Enabled:       false,
+		QueueNum:      0,
+		MaxQueueLen:   1024,
+		MaxPacketLen:  0xFFFF,
+		EnableTLS:     true,
+		EnableHTTP:    true,
+		EnableHTTP2:   true,
+		AllowedPorts:  []uint16{443, 80, 8443},
+		AdditionalTTL: 1 * time.Hour,
+	},
 }
 
 var (

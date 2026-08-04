@@ -1,0 +1,92 @@
+configVersion: 0.7.0
+app:
+  httpWeb:
+    enabled: true
+    auth:
+      enabled: false
+    host:
+      address: "0.0.0.0"
+      port: 8080
+    skin: default
+  dnsProxy:
+    host:
+      address: "0.0.0.0"
+      port: 53
+    upstream:
+      address: 1.1.1.1
+      port: 53
+    disableRemap53: false
+    disableFakePTR: false
+    disableDropAAAA: false
+    maxIdleConns: 10
+    maxConcurrent: 100
+    timeout: 5s
+  netfilter:
+    iptables:
+      chainPrefix: MT_
+    ipset:
+      tablePrefix: mt_
+      additionalTTL: 1h0m0s
+    disableIPv4: false
+    disableIPv6: true   # IPv6 in containers is unreliable; keep the stand simple
+    startMarkTableIndex: 1298229097
+  link:
+    []                   # empty → MagiTrickle auto-enumerates all non-loopback interfaces
+  showAllInterfaces: true
+  logLevel: debug
+  sniSniffer:
+    enabled: true
+    queueNum: 0
+    maxQueueLen: 1024
+    maxPacketLen: 65535
+    verdictTimeoutNs: 50000000
+    enableTLS: true
+    enableHTTP: true
+    enableHTTP2: true
+    allowedPorts:
+      - 443
+      - 80
+      - 8443
+    additionalTTL: 3600
+groups:
+  # mt-router — used by the e2e tests (test-tls, test-http, test-http2).
+  # No wildcard rule here on purpose: if a wildcard matched everything,
+  # every probe's resolved IP would land in mt_d663a11a_4 and the MT_SNI
+  # RETURN rule would short-circuit NFQUEUE on every back-to-back run,
+  # so hits_total would never increment.
+  - id: d663a11a
+    name: mt-router
+    interface: ens18
+    enable: true
+    rules:
+      - id: 6f34ee91
+        name: example
+        type: namespace
+        rule: example.com
+        enable: true
+      - id: 6f34ee92
+        name: cloudflare
+        type: domain
+        rule: cloudflare.com
+        enable: true
+      - id: 6f34ee93
+        name: mozilla
+        type: namespace
+        rule: mozilla.org
+        enable: true
+
+  # mt-stress — wildcard group used by stress-sni. Kept in a separate
+  # group from mt-router so the e2e tests can reset the test group
+  # without wiping the stress group's attribution state (and vice-versa).
+  # stress-sni relies on this rule to exercise OnDomain → ipset → MT_SNI
+  # RETURN under load.
+  - id: a1b2c3d4
+    name: mt-stress
+    interface: ens18
+    enable: true
+    rules:
+      - id: 6f34ee94
+        name: all-domains
+        type: wildcard
+        rule: "*"
+        enable: true

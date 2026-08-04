@@ -94,5 +94,11 @@ func NewRouter(a app.Main) chi.Router {
 			r.Post("/netfilterd", h.NetfilterDHook)
 		})
 	})
+	r.Route("/sniffer", func(r chi.Router) {
+		r.Get("/config", h.GetSNISnifferConfig)
+		r.Put("/config", h.PutSNISnifferConfig)
+		r.Get("/stats", h.GetSNISnifferStats)
+		r.Get("/recent", h.GetSNISnifferRecent)
+	})
 	return r
 }

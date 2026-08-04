@@ -1,0 +1,9 @@
+Package: magitrickle
+Version: __VERSION__
+Section: net
+Priority: optional
+Architecture: __ARCH__
+Depends: iptables-nft | iptables, ipset, systemd
+Maintainer: __MAINTAINER__
+Description: __DESCRIPTION__
+ Homepage: __URL__

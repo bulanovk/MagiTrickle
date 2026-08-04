@@ -1,0 +1,57 @@
+# Dockerfile.e2e — test harness for the SNI sniffer end-to-end integration test.
+#
+# Builds MagiTrickle in a privileged Debian/Ubuntu container, loads the
+# xt_NFQUEUE / ip_set / iptables kernel modules from host, and runs the
+# Go integration test (build tag `integration && linux`) against real
+# iptables + ipset + netlink. Run with:
+#
+#   docker build -f Dockerfile.e2e -t magitrickle-e2e . \
+#     && docker run --rm --privileged --network host -it magitrickle-e2e
+#
+# --privileged is required so the container can manipulate iptables/ipset
+# on its own netns; --network host lets tests bind real localhost ports.
+#
+# XT_NFQUEUE is loaded at run time via modprobe — the host kernel must
+# ship these modules.
+FROM golang:1.25-bookworm
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      iptables \
+      ipset \
+      kmod \
+      ca-certificates \
+      libnetfilter-queue-dev \
+      libmnl-dev \
+      libnfnetlink-dev \
+      gcc \
+      iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . .
+
+ENV GOFLAGS=-mod=mod
+ENV CGO_ENABLED=1
+
+# Build the backend. cgo is required because the NFQUEUE receiver
+# talks to libnetfilter_queue directly (see sniffer/nfqueue_linux.go).
+RUN cd src/backend && go build -tags linux -o /out/magitrickled ./cmd/magitrickled
+
+# Bundle the frontend dist so the image is self-contained for sniffer-target.
+COPY src/frontend/dist /usr/share/magitrickle/skins/default
+
+# Test stage — runs the sniffer integration test under integration build tag.
+# The image must be run with --privileged and --network host so iptables/ipset
+# can manipulate the container's network namespace.
+CMD ["bash", "-lc", "\
+  set -e; \
+  export PATH=\"$PATH:/usr/local/go/bin\"; \
+  go version; \
+  modprobe xt_NFQUEUE 2>/dev/null || echo 'xt_NFQUEUE load failed (kernel may not support)'; \
+  modprobe ip_set      2>/dev/null || true; \
+  modprobe nfnetlink   2>/dev/null || true; \
+  cd src/backend && \
+  go test -tags=integration -count=1 -v -timeout 60s ./tests/sniffer_integ/... \
+"]

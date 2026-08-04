@@ -6,6 +6,7 @@ type AppConfig struct {
 	HTTPWeb           AppConfigHTTPWeb
 	DNSProxy          AppConfigDNSProxy
 	Netfilter         AppConfigNetfilter
+	SNISniffer        AppConfigSNISniffer
 	Link              []string
 	ShowAllInterfaces bool
 	LogLevel          string
@@ -58,4 +59,21 @@ type AppConfigIPTables struct {
 type AppConfigIPSet struct {
 	TablePrefix   string
 	AdditionalTTL time.Duration
+}
+
+// AppConfigSNISniffer is the runtime representation of the sniffer config.
+// Fields use plain types because defaults are filled by LoadConfig from
+// constant.DefaultAppConfig before unmarshalling user overrides.
+type AppConfigSNISniffer struct {
+	Enabled       bool
+	QueueNum      uint16
+	MaxQueueLen   uint32
+	MaxPacketLen  uint32
+	EnableTLS     bool
+	EnableHTTP    bool
+	EnableHTTP2   bool
+	AllowedPorts  []uint16
+	AdditionalTTL time.Duration
+	// LogDNSMismatch gates the SNI/DNS disagreement diagnostic log.
+	LogDNSMismatch bool
 }

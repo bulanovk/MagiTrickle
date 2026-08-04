@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"magitrickle/models"
+	"magitrickle/sniffer"
 	"magitrickle/utils/intID"
 	"magitrickle/utils/netfilterTools"
+	"magitrickle/utils/recordsCache"
 
 	"github.com/vishvananda/netlink"
 )
@@ -43,6 +45,10 @@ type Main interface {
 	DnsOverrider() *netfilterTools.PortRemap
 	LoadConfig() error
 	SaveConfig() error
+	SNISnifferStats() (sniffer.Stats, error)
+	SNISnifferRecent(limit int) ([]recordsCache.SNIObservation, error)
+	SNISnifferConfig() models.AppConfigSNISniffer
+	SetSNISnifferConfig(cfg models.AppConfigSNISniffer, save bool) error
 	ForceCommitIPTables() error
 	Start(ctx context.Context) (err error)
 }

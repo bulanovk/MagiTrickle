@@ -219,6 +219,19 @@ func (g *RuleSet) enable() error {
 	}
 	g.ipsetToLink = ipsetToLink
 
+	// Insert RETURN rules into MT_SNI so packets whose dst IP is
+	// already attributed to this group skip the NFQUEUE sniffer.
+	if g.app.sniRules != nil {
+		prefix := g.app.nfHelper.IpsetPrefix
+		key := g.RuntimeKey()
+		if err := g.app.sniRules.AddGroupReturn(
+			prefix+key+"_4",
+			prefix+key+"_6",
+		); err != nil {
+			return fmt.Errorf("failed to add SNI RETURN rules: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -253,6 +266,17 @@ func (g *RuleSet) disable() error {
 		g.ipsetToLink = nil
 		return nil
 	}())
+	// Remove the MT_SNI RETURN rules before destroying the ipset so
+	// the sniffer resumes inspecting flows to these IPs (they are no
+	// longer attributed to this group).
+	if g.app.sniRules != nil {
+		prefix := g.app.nfHelper.IpsetPrefix
+		key := g.RuntimeKey()
+		_ = g.app.sniRules.DelGroupReturn(
+			prefix+key+"_4",
+			prefix+key+"_6",
+		)
+	}
 	errs = append(errs, func() error {
 		if g.ipset == nil {
 			return nil

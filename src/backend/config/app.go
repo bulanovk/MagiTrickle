@@ -3,12 +3,13 @@ package config
 import "time"
 
 type App struct {
-	HTTPWeb           *HTTPWeb   `yaml:"httpWeb"`
-	DNSProxy          *DNSProxy  `yaml:"dnsProxy"`
-	Netfilter         *Netfilter `yaml:"netfilter"`
-	Link              *[]string  `yaml:"link"`
-	ShowAllInterfaces *bool      `yaml:"showAllInterfaces"`
-	LogLevel          *string    `yaml:"logLevel"`
+	HTTPWeb           *HTTPWeb    `yaml:"httpWeb"`
+	DNSProxy          *DNSProxy   `yaml:"dnsProxy"`
+	Netfilter         *Netfilter  `yaml:"netfilter"`
+	SNISniffer        *SNISniffer `yaml:"sniSniffer"`
+	Link              *[]string   `yaml:"link"`
+	ShowAllInterfaces *bool       `yaml:"showAllInterfaces"`
+	LogLevel          *string     `yaml:"logLevel"`
 }
 
 type HTTPWeb struct {
@@ -58,4 +59,23 @@ type IPTables struct {
 type IPSet struct {
 	TablePrefix   *string        `yaml:"tablePrefix"`
 	AdditionalTTL *time.Duration `yaml:"additionalTTL"`
+}
+
+// SNISniffer holds optional first-packet domain attribution settings.
+// Parses TLS ClientHello and HTTP Host / :authority from TCP flows whose
+// destination IP is not yet covered by any active ipset, catching DoH/DoT
+// traffic and ECH-protected flows that bypass DNS-MITM.
+type SNISniffer struct {
+	Enabled       *bool          `yaml:"enabled"`
+	QueueNum      *uint16        `yaml:"queueNum"`
+	MaxQueueLen   *uint32        `yaml:"maxQueueLen"`
+	MaxPacketLen  *uint32        `yaml:"maxPacketLen"`
+	EnableTLS     *bool          `yaml:"enableTLS"`
+	EnableHTTP    *bool          `yaml:"enableHTTP"`
+	EnableHTTP2   *bool          `yaml:"enableHTTP2"`
+	AllowedPorts  *[]uint16      `yaml:"allowedPorts"`
+	AdditionalTTL *time.Duration `yaml:"additionalTTL"`
+	// LogDNSMismatch enables INFO logging when SNI and DNS attribute
+	// the same IP to different domains. Diagnostic only; default false.
+	LogDNSMismatch *bool `yaml:"logDNSMismatch"`
 }

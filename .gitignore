@@ -3,3 +3,7 @@
 .DS_Store
 private-key.pem
 public-key.pem
+.tokensave
+.claude/
+.headroom/
+docs/superpowers/
