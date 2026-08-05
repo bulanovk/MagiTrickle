@@ -152,5 +152,5 @@ up.
 
 - Change `groups[].rules[]` in `router/config.yaml` to match different
   domains.
-- Change `sniSniffer.allowedPorts` to widen the port allow-list.
+- The SNI sniffer watches all TCP ports; there is no port allow-list.
 - To disable the SNI path entirely: set `sniSniffer.enabled: false`.

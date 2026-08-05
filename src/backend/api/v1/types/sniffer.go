@@ -13,7 +13,6 @@ type SNISnifferConfigRes struct {
 	EnableTLS      bool          `json:"enable_tls"`
 	EnableHTTP     bool          `json:"enable_http"`
 	EnableHTTP2    bool          `json:"enable_http2"`
-	AllowedPorts   []uint16      `json:"allowed_ports"`
 	AdditionalTTL  time.Duration `json:"additional_ttl_ns"`
 	LogDNSMismatch bool          `json:"log_dns_mismatch"`
 }

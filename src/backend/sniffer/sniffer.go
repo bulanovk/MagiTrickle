@@ -49,10 +49,6 @@ type Config struct {
 	// EnableHTTP2 controls parsing of HTTP/2 :authority pseudo-headers.
 	EnableHTTP2 bool
 
-	// AllowedPorts restricts NFQUEUE interception to specific destination
-	// ports. Empty means all ports.
-	AllowedPorts []uint16
-
 	// AdditionalTTL extends ipset entries beyond DNS TTL. Default 1h.
 	AdditionalTTL time.Duration
 }

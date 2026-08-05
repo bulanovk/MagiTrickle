@@ -75,7 +75,7 @@ func (a *App) Start(ctx context.Context) (err error) {
 				Bool("conntrack", probe.Conntrack).
 				Msg("SNI sniffer: probe OK")
 
-			a.sniRules = nfh.SNIRules(a.config.SNISniffer.QueueNum, a.config.SNISniffer.AllowedPorts)
+			a.sniRules = nfh.SNIRules(a.config.SNISniffer.QueueNum)
 			if err := a.sniRules.Enable(); err != nil {
 				log.Warn().Err(err).Msg("SNI sniffer: failed to install MT_SNI chain; falling back to disabled")
 				sniEnabled = false
@@ -105,7 +105,6 @@ func (a *App) Start(ctx context.Context) (err error) {
 		EnableTLS:     a.config.SNISniffer.EnableTLS,
 		EnableHTTP:    a.config.SNISniffer.EnableHTTP,
 		EnableHTTP2:   a.config.SNISniffer.EnableHTTP2,
-		AllowedPorts:  a.config.SNISniffer.AllowedPorts,
 		AdditionalTTL: a.config.SNISniffer.AdditionalTTL,
 	})
 	snifferHooks := newSNIMatcher(a)

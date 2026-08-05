@@ -110,7 +110,6 @@ func (a *App) LoadConfig() error {
 			applyIfSet(&a.config.SNISniffer.EnableTLS, s.EnableTLS)
 			applyIfSet(&a.config.SNISniffer.EnableHTTP, s.EnableHTTP)
 			applyIfSet(&a.config.SNISniffer.EnableHTTP2, s.EnableHTTP2)
-			applyIfSet(&a.config.SNISniffer.AllowedPorts, s.AllowedPorts)
 			applyIfSet(&a.config.SNISniffer.LogDNSMismatch, s.LogDNSMismatch)
 			if s.AdditionalTTL != nil {
 				t := *s.AdditionalTTL
@@ -221,7 +220,6 @@ func (a *App) SaveConfig() error {
 				EnableTLS:      &a.config.SNISniffer.EnableTLS,
 				EnableHTTP:     &a.config.SNISniffer.EnableHTTP,
 				EnableHTTP2:    &a.config.SNISniffer.EnableHTTP2,
-				AllowedPorts:   &a.config.SNISniffer.AllowedPorts,
 				AdditionalTTL:  &a.config.SNISniffer.AdditionalTTL,
 				LogDNSMismatch: &a.config.SNISniffer.LogDNSMismatch,
 			},

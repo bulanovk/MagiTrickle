@@ -47,10 +47,6 @@ app:
     enableTLS: true
     enableHTTP: true
     enableHTTP2: true
-    allowedPorts:
-      - 443
-      - 80
-      - 8443
     additionalTTL: 3600
 groups:
   - id: d663876a

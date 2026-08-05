@@ -30,7 +30,6 @@ func (h *Handler) GetSNISnifferConfig(w http.ResponseWriter, r *http.Request) {
 		EnableTLS:      cfg.EnableTLS,
 		EnableHTTP:     cfg.EnableHTTP,
 		EnableHTTP2:    cfg.EnableHTTP2,
-		AllowedPorts:   cfg.AllowedPorts,
 		AdditionalTTL:  cfg.AdditionalTTL,
 		LogDNSMismatch: cfg.LogDNSMismatch,
 	})
@@ -134,7 +133,6 @@ func sniConfigFromReq(r types.SNISnifferConfigRes) models.AppConfigSNISniffer {
 		EnableTLS:      r.EnableTLS,
 		EnableHTTP:     r.EnableHTTP,
 		EnableHTTP2:    r.EnableHTTP2,
-		AllowedPorts:   r.AllowedPorts,
 		AdditionalTTL:  r.AdditionalTTL,
 		LogDNSMismatch: r.LogDNSMismatch,
 	}

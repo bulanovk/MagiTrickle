@@ -51,7 +51,6 @@ var DefaultAppConfig = models.AppConfig{
 		EnableTLS:     true,
 		EnableHTTP:    true,
 		EnableHTTP2:   true,
-		AllowedPorts:  []uint16{443, 80, 8443},
 		AdditionalTTL: 1 * time.Hour,
 	},
 }

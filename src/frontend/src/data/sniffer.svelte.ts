@@ -9,7 +9,6 @@ export type SNISnifferConfig = {
 	enable_tls: boolean;
 	enable_http: boolean;
 	enable_http2: boolean;
-	allowed_ports: number[];
 	additional_ttl_ns: number;
 	log_dns_mismatch: boolean;
 };

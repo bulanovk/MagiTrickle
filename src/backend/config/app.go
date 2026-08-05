@@ -73,7 +73,6 @@ type SNISniffer struct {
 	EnableTLS     *bool          `yaml:"enableTLS"`
 	EnableHTTP    *bool          `yaml:"enableHTTP"`
 	EnableHTTP2   *bool          `yaml:"enableHTTP2"`
-	AllowedPorts  *[]uint16      `yaml:"allowedPorts"`
 	AdditionalTTL *time.Duration `yaml:"additionalTTL"`
 	// LogDNSMismatch enables INFO logging when SNI and DNS attribute
 	// the same IP to different domains. Diagnostic only; default false.

@@ -72,7 +72,6 @@ type AppConfigSNISniffer struct {
 	EnableTLS     bool
 	EnableHTTP    bool
 	EnableHTTP2   bool
-	AllowedPorts  []uint16
 	AdditionalTTL time.Duration
 	// LogDNSMismatch gates the SNI/DNS disagreement diagnostic log.
 	LogDNSMismatch bool

@@ -4,7 +4,7 @@
 # already in an ipset.
 #
 # Mirrors the structure of test-sni.sh (TLS) and test-http.sh (HTTP/1.1).
-# The router config has enableHTTP2: true and 80 listed in allowedPorts,
+# The router config has enableHTTP2: true and no port allow-list,
 # so h2c flows are intercepted by NFQUEUE.
 #
 # External DNS (1.1.1.1) is used so resolved IPs stay out of the

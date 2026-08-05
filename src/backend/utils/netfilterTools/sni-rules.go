@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -12,21 +11,19 @@ import (
 )
 
 // SNIRules owns the MT_SNI chain installed in the mangle table. The
-// chain's final rule sends unmatched TCP flows on the configured
-// allowed ports to NFQUEUE for the SNI sniffer. Each active group
-// inserts a RETURN rule ahead of the NFQUEUE fallback: packets whose
-// dst IP matches a group ipset exit the chain immediately and never
-// reach the userspace sniffer.
+// chain's final rule sends unmatched TCP flows to NFQUEUE for the SNI
+// sniffer. Each active group inserts a RETURN rule ahead of the NFQUEUE
+// fallback: packets whose dst IP matches a group ipset exit the chain
+// immediately and never reach the userspace sniffer.
 //
-// Chain layout (example with two groups, allowedPorts=[443,80,8443]):
+// Chain layout (example with two groups):
 //
 //	-m set --match-set mt_<group1>_4 dst -j RETURN
 //	-m set --match-set mt_<group2>_4 dst -j RETURN
-//	-p tcp -m multiport --dports 443,80,8443 -j NFQUEUE --queue-num N
+//	-p tcp -j NFQUEUE --queue-num N
 //
-// When allowedPorts is empty the rule matches all TCP (the same
-// semantics as sniffer.portAllowed). Filtering at the kernel layer
-// keeps unrelated traffic out of the userspace queue entirely.
+// Every TCP flow reaches the userspace sniffer — there is no port
+// allow-list; the parser decides per payload whether it is TLS/HTTP.
 //
 // The RETURN rules are managed via AddGroupReturn/DelGroupReturn so
 // the chain stays in sync with active groups regardless of whether the
@@ -35,9 +32,8 @@ type SNIRules struct {
 	enabled atomic.Bool
 	locker  sync.Mutex
 
-	nh          *Helper
-	queueNum    uint16
-	allowedPorts []uint16
+	nh       *Helper
+	queueNum uint16
 }
 
 func (r *SNIRules) chainName() string { return r.nh.ChainPrefix + "SNI" }
@@ -81,15 +77,7 @@ func (r *SNIRules) insertRules(ipt *iptables.IPTables) error {
 	// library feeds them to the callback. If the daemon crashes
 	// the MT_SNI chain is torn down during shutdown, so there is
 	// no permanent-dropping window.
-	args := []string{"-p", "tcp"}
-	if len(r.allowedPorts) > 0 {
-		portStrs := make([]string, len(r.allowedPorts))
-		for i, p := range r.allowedPorts {
-			portStrs[i] = strconv.Itoa(int(p))
-		}
-		args = append(args, "-m", "multiport", "--dports", strings.Join(portStrs, ","))
-	}
-	args = append(args, "-j", "NFQUEUE", "--queue-num", strconv.Itoa(int(r.queueNum)))
+	args := []string{"-p", "tcp", "-j", "NFQUEUE", "--queue-num", strconv.Itoa(int(r.queueNum))}
 	if err := ipt.Append(table, chain, args...); err != nil {
 		return fmt.Errorf("failed to append NFQUEUE rule to %s: %w", chain, err)
 	}
@@ -237,13 +225,11 @@ func (r *SNIRules) Enabled() bool {
 }
 
 // SNIRules returns a lazy view bound to the helper. Call Enable() to
-// materialise the iptables rules. allowedPorts restricts NFQUEUE
-// interception to specific destination TCP ports; empty means "all
-// TCP", matching sniffer.portAllowed semantics.
-func (nh *Helper) SNIRules(queueNum uint16, allowedPorts []uint16) *SNIRules {
+// materialise the iptables rules. The NFQUEUE fallback matches all TCP
+// flows; the sniffer's parser filters per payload.
+func (nh *Helper) SNIRules(queueNum uint16) *SNIRules {
 	return &SNIRules{
-		nh:           nh,
-		queueNum:     queueNum,
-		allowedPorts: allowedPorts,
+		nh:       nh,
+		queueNum: queueNum,
 	}
 }

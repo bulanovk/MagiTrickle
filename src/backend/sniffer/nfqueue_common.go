@@ -87,10 +87,6 @@ func handlePacketShared(rec *counters, flows *sync.Map, hooks *atomic.Pointer[Ho
 		return
 	}
 	tcpPayloadOffset := transport + dataOff
-	if !portAllowed(cfg.AllowedPorts, tcpDstPort) {
-		rec.recordPacket(false, true, false)
-		return
-	}
 	tcpPayload := payload[tcpPayloadOffset:]
 	if len(tcpPayload) == 0 {
 		rec.recordEmpty()
@@ -155,18 +151,6 @@ func fireHookShared(hooks *atomic.Pointer[Hooks], res SniffResult, dst net.IP) {
 	}
 	h := *hooksPtr
 	h.OnDomain(res.Domain, dst, res.Protocol)
-}
-
-func portAllowed(allowed []uint16, p uint16) bool {
-	if len(allowed) == 0 {
-		return true
-	}
-	for _, v := range allowed {
-		if v == p {
-			return true
-		}
-	}
-	return false
 }
 
 func evictStaleFlows(flows *sync.Map) {

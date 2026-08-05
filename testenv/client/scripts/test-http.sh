@@ -4,7 +4,7 @@
 #
 # Mirrors the structure of test-sni.sh (TLS path) but exercises
 # HTTP/1.1 on port 80. The router config (router/config.yaml) has
-# enableHTTP: true and 80 listed in allowedPorts, so HTTP flows are
+# enableHTTP: true and no port allow-list, so HTTP flows are
 # intercepted by NFQUEUE.
 #
 # External DNS (1.1.1.1) is used so resolved IPs stay out of the

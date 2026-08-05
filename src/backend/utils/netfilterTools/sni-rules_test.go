@@ -10,7 +10,8 @@ import (
 )
 
 // helper to build a SNIRules wired to a fresh FakeIPTables instance.
-func newTestSNIRules(t *testing.T, proto iptables.Protocol, allowedPorts []uint16) (*SNIRules, *iptables.FakeIPTables) {
+// The port allow-list is gone, so no port argument exists.
+func newTestSNIRules(t *testing.T, proto iptables.Protocol) (*SNIRules, *iptables.FakeIPTables) {
 	t.Helper()
 	fake := iptables.NewFakeIPTables(proto)
 	nh := &Helper{
@@ -24,7 +25,7 @@ func newTestSNIRules(t *testing.T, proto iptables.Protocol, allowedPorts []uint1
 	} else {
 		nh.IPTables6 = iptables.NewIPTables(fake)
 	}
-	return nh.SNIRules(0, allowedPorts), fake
+	return nh.SNIRules(0), fake
 }
 
 // findRule returns the first NFQUEUE rule in mangle/<chain>.
@@ -48,55 +49,43 @@ func findNFQUEERule(t *testing.T, fake *iptables.FakeIPTables, chain string) []s
 // rulesString renders a rule as a single string for substring checks.
 func rulesString(rule []string) string { return strings.Join(rule, " ") }
 
-// TestSNIRule_QueuesAllowedPorts ensures the NFQUEUE rule scopes
-// interception to the configured allowedPorts via -m multiport.
-func TestSNIRule_QueuesAllowedPorts(t *testing.T) {
-	r, fake := newTestSNIRules(t, iptables.ProtocolIPv4, []uint16{443, 80, 8443})
-	if err := r.Enable(); err != nil {
-		t.Fatalf("Enable: %v", err)
-	}
-	defer r.Disable()
+// TestSNIRule_QueuesAllTCP ensures the NFQUEUE fallback rule matches all
+// TCP flows. The port allow-list was removed, so the rule must be exactly
+// `-p tcp -j NFQUEUE --queue-num N` with no port match. Verified for both
+// IPv4 and IPv6.
+func TestSNIRule_QueuesAllTCP(t *testing.T) {
+	for _, proto := range []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv6} {
+		r, fake := newTestSNIRules(t, proto)
+		if err := r.Enable(); err != nil {
+			t.Fatalf("Enable (%v): %v", proto, err)
+		}
+		defer r.Disable()
 
-	rule := findNFQUEERule(t, fake, "MT_SNI")
-	rs := rulesString(rule)
-	if !strings.Contains(rs, "-p tcp") {
-		t.Errorf("NFQUEUE rule missing `-p tcp`; got: %s", rs)
-	}
-	if !strings.Contains(rs, "--dports 443,80,8443") {
-		t.Errorf("NFQUEUE rule should use multiport for configured ports; got: %s", rs)
-	}
-	if strings.Contains(rs, " --dport ") {
-		t.Errorf("NFQUEUE rule should not use single `--dport` form when multiport applies; got: %s", rs)
-	}
-}
-
-// TestSNIRule_AllTCPWhenAllowedPortsEmpty ensures that with no port
-// allow-list the rule matches all TCP (mirrors sniffer.portAllowed).
-func TestSNIRule_AllTCPWhenAllowedPortsEmpty(t *testing.T) {
-	r, fake := newTestSNIRules(t, iptables.ProtocolIPv4, nil)
-	if err := r.Enable(); err != nil {
-		t.Fatalf("Enable: %v", err)
-	}
-	defer r.Disable()
-
-	rule := findNFQUEERule(t, fake, "MT_SNI")
-	rs := rulesString(rule)
-	if !strings.Contains(rs, "-p tcp") {
-		t.Errorf("NFQUEUE rule missing `-p tcp`; got: %s", rs)
-	}
-	if strings.Contains(rs, "multiport") || strings.Contains(rs, "--dport") {
-		t.Errorf("NFQUEUE rule should not carry any port match when allowedPorts is empty; got: %s", rs)
+		rule := findNFQUEERule(t, fake, "MT_SNI")
+		rs := rulesString(rule)
+		if !strings.Contains(rs, "-p tcp") {
+			t.Errorf("%v: NFQUEUE rule missing `-p tcp`; got: %s", proto, rs)
+		}
+		if !strings.Contains(rs, "-j NFQUEUE") {
+			t.Errorf("%v: NFQUEUE rule missing `-j NFQUEUE`; got: %s", proto, rs)
+		}
+		if !strings.Contains(rs, "--queue-num 0") {
+			t.Errorf("%v: NFQUEUE rule missing `--queue-num 0`; got: %s", proto, rs)
+		}
+		if strings.Contains(rs, "multiport") || strings.Contains(rs, "--dport") {
+			t.Errorf("%v: NFQUEUE rule should not carry any port match (allow-list removed); got: %s", proto, rs)
+		}
 	}
 }
 
 // TestSNIRule_DirectionQueuesAllTraffic documents that the rule no
 // longer filters to ORIGINAL direction only — conntrack does not
 // reliably tag post-handshake segments as ORIGINAL under MASQUERADE
-// on Linux 6.8, so the broader "any TCP to the allowed ports" match
-// is used. The callback drops REPLY-direction packets (ServerHello,
-// cert fragments) at the parser level.
+// on Linux 6.8, so the broader "any TCP" match is used. The callback
+// drops REPLY-direction packets (ServerHello, cert fragments) at the
+// parser level.
 func TestSNIRule_DirectionQueuesAllTraffic(t *testing.T) {
-	r, fake := newTestSNIRules(t, iptables.ProtocolIPv4, []uint16{443})
+	r, fake := newTestSNIRules(t, iptables.ProtocolIPv4)
 	if err := r.Enable(); err != nil {
 		t.Fatalf("Enable: %v", err)
 	}
@@ -115,7 +104,7 @@ func TestSNIRule_DirectionQueuesAllTraffic(t *testing.T) {
 // TestSNIRule_GroupReturn verifies that AddGroupReturn inserts RETURN
 // rules before the NFQUEUE fallback, and DelGroupReturn removes them.
 func TestSNIRule_GroupReturn(t *testing.T) {
-	r, fake := newTestSNIRules(t, iptables.ProtocolIPv4, []uint16{443})
+	r, fake := newTestSNIRules(t, iptables.ProtocolIPv4)
 	if err := r.Enable(); err != nil {
 		t.Fatalf("Enable: %v", err)
 	}
@@ -165,22 +154,4 @@ func containsToken(rule []string, token string) bool {
 		}
 	}
 	return false
-}
-
-// TestSNIRule_IPv6_QueuesAllowedPorts mirrors the IPv4 check for IPv6.
-func TestSNIRule_IPv6_QueuesAllowedPorts(t *testing.T) {
-	r, fake := newTestSNIRules(t, iptables.ProtocolIPv6, []uint16{443, 80, 8443})
-	if err := r.Enable(); err != nil {
-		t.Fatalf("Enable: %v", err)
-	}
-	defer r.Disable()
-
-	rule := findNFQUEERule(t, fake, "MT_SNI")
-	rs := rulesString(rule)
-	if !strings.Contains(rs, "-p tcp") {
-		t.Errorf("IPv6 NFQUEUE rule missing `-p tcp`; got: %s", rs)
-	}
-	if !strings.Contains(rs, "--dports 443,80,8443") {
-		t.Errorf("IPv6 NFQUEUE rule should use multiport for configured ports; got: %s", rs)
-	}
 }

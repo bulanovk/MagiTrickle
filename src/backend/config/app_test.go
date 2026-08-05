@@ -16,7 +16,6 @@ func TestSNISniffer_YAMLRoundtrip(t *testing.T) {
 	enableTLS := false
 	enableHTTP := true
 	enableHTTP2 := true
-	ports := []uint16{443, 8443}
 	addTTL := 2 * time.Hour
 
 	in := &App{
@@ -27,7 +26,6 @@ func TestSNISniffer_YAMLRoundtrip(t *testing.T) {
 			EnableTLS:      &enableTLS,
 			EnableHTTP:     &enableHTTP,
 			EnableHTTP2:    &enableHTTP2,
-			AllowedPorts:   &ports,
 			AdditionalTTL:  &addTTL,
 		},
 	}
@@ -56,9 +54,6 @@ func TestSNISniffer_YAMLRoundtrip(t *testing.T) {
 	}
 	if back.SNISniffer.EnableTLS == nil || *back.SNISniffer.EnableTLS != enableTLS {
 		t.Errorf("EnableTLS = %v, want %v", back.SNISniffer.EnableTLS, enableTLS)
-	}
-	if back.SNISniffer.AllowedPorts == nil || len(*back.SNISniffer.AllowedPorts) != 2 {
-		t.Errorf("AllowedPorts roundtrip lost entries: %v", back.SNISniffer.AllowedPorts)
 	}
 	if back.SNISniffer.AdditionalTTL == nil || *back.SNISniffer.AdditionalTTL != addTTL {
 		t.Errorf("AdditionalTTL = %v, want %v", back.SNISniffer.AdditionalTTL, addTTL)
