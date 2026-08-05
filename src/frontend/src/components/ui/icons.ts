@@ -1,3 +1,4 @@
+export { default as Eye } from "lucide-svelte/icons/eye";
 export { default as GroupExpand } from "lucide-svelte/icons/square-plus";
 export { default as GroupCollapse } from "lucide-svelte/icons/square-minus";
 export { default as SelectOpen } from "lucide-svelte/icons/chevron-down";

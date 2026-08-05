@@ -3,6 +3,7 @@
 
   import { t } from "../../data/locale.svelte";
   import GroupsView from "../../modules/groups/GroupsView.svelte";
+  import SnifferView from "../../modules/sniffer/SnifferView.svelte";
   import SubscriptionsView from "../../modules/subscriptions/SubscriptionsView.svelte";
   import { persistedState } from "../../utils/persisted-state.svelte";
   // import LogsPanel from "../../modules/logs/LogsPanel.svelte";
@@ -13,7 +14,7 @@
   import Toast from "../feedback/Toast.svelte";
   import HeaderSettings from "./HeaderSettings.svelte";
 
-  import { LayoutList, Menu, RSS } from "../ui/icons";
+  import { Eye, LayoutList, Menu, RSS } from "../ui/icons";
 
   const lastActiveTab = persistedState("active_tab", "groups");
   let active_tab = $state(lastActiveTab.current);
@@ -66,6 +67,11 @@
               {t("Subscriptions")}
             </Tabs.Trigger>
 
+            <Tabs.Trigger value="sniffer" onclick={closeMenu}>
+              <span class="tab-icon"><Eye size={24} /></span>
+              {t("SNI sniffer")}
+            </Tabs.Trigger>
+
             <!--
             <Tabs.Trigger value="settings" onclick={closeMenu}>Settings</Tabs.Trigger>
             <Tabs.Trigger value="logs" onclick={closeMenu}>Logs</Tabs.Trigger>
@@ -85,6 +91,9 @@
       </Tabs.Content>
       <Tabs.Content value="subscriptions">
         <SubscriptionsView onRenderComplete={() => (isRenderCompleteSubscriptions = true)} />
+      </Tabs.Content>
+      <Tabs.Content value="sniffer">
+        <SnifferView />
       </Tabs.Content>
       <!-- <Tabs.Content value="settings">...</Tabs.Content> -->
     </article>

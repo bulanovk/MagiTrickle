@@ -1,0 +1,34 @@
+# Dockerfile.standalone — slim MagiTrickle image with a pre-built binary.
+#
+# Build from repo root:
+#   docker build -f testenv/router/Dockerfile.standalone -t magitrickle-e2e:latest .
+#
+# Requires .build/ubuntu_amd64/compile/magitrickled (built via `make build_backend`)
+# and src/frontend/dist/ (built via `make build_frontend`).
+
+FROM debian:bookworm-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      iptables \
+      ipset \
+      kmod \
+      ca-certificates \
+      curl \
+      procps \
+      libnetfilter-queue1 \
+      libmnl0 \
+      libnfnetlink0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-built backend binary
+COPY .build/ubuntu_amd64/compile/magitrickled /out/magitrickled
+
+# Frontend dist (skin)
+COPY src/frontend/dist /usr/share/magitrickle/skins/default
+
+# Config and entrypoint are mounted at runtime via docker-compose volumes,
+# so the image only bakes the binary + frontend + system deps.
+
+CMD ["/out/magitrickled", "-config", "/var/lib/magitrickle/config.yaml"]

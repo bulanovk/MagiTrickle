@@ -1,5 +1,14 @@
 /.build
 /.config
 .DS_Store
+.serena/
 private-key.pem
 public-key.pem
+.tokensave
+.claude/
+.headroom/
+docs/superpowers/
+testenv/client/stress-sni/stress-sni
+testenv/client/stress-sni/domains.txt
+testenv/client/stress-sni/test-domains.txt
+testenv/client/stress-sni/prebuilt-domains.txt

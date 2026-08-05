@@ -19,17 +19,37 @@ func (nh *Helper) cleanIPTables(ipt *iptables.IPTables) error {
 		return fmt.Errorf("listing chains error: %w", err)
 	}
 
+	// Chains (and their inbound jumps) owned by SNIRules are managed
+	// outside the normal group-link lifecycle and live in mangle. They
+	// are installed once per session by sniRules.Enable() and must
+	// survive the start-of-day clean so the sniffer stays wired.
+	sniChainName := nh.ChainPrefix + "SNI"
+	sniJumpTarget := "-j " + sniChainName
+	isSNIManaged := func(chain string) bool {
+		return chain == sniChainName
+	}
+	jumpTargetsSNIManaged := func(rule interface{ Contains(string) bool }) bool {
+		return rule.Contains(sniJumpTarget)
+	}
+
 	for table, chains := range exists {
 		chainListToDelete := make([]string, 0)
 
 		for chain, rules := range chains {
 			if strings.HasPrefix(chain, nh.ChainPrefix) {
-				chainListToDelete = append(chainListToDelete, chain)
+				if !isSNIManaged(chain) {
+					chainListToDelete = append(chainListToDelete, chain)
+				}
 				continue
 			}
 
 			for _, r := range rules {
 				if !r.Contains(jumpToChainPrefix) {
+					continue
+				}
+				if jumpTargetsSNIManaged(r) {
+					// -j MT_SNI is owned by SNIRules and must remain
+					// in PREROUTING for the sniffer to receive packets.
 					continue
 				}
 

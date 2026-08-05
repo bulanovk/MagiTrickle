@@ -1,0 +1,81 @@
+configVersion: 0.7.0
+app:
+  httpWeb:
+    enabled: true
+    auth:
+      enabled: false
+    host:
+      address: "[::]"
+      port: 8080
+    skin: default
+  dnsProxy:
+    host:
+      address: "[::]"
+      port: 3553
+    upstream:
+      address: 127.0.0.1
+      port: 53
+    disableRemap53: false
+    disableFakePTR: false
+    disableDropAAAA: false
+    maxIdleConns: 10
+    maxConcurrent: 100
+    timeout: 5s
+  netfilter:
+    iptables:
+      chainPrefix: MT_
+    ipset:
+      tablePrefix: mt_
+      additionalTTL: 1h0m0s
+    disableIPv4: false
+    disableIPv6: false
+    startMarkTableIndex: 1298229097
+  link:
+    []
+  showAllInterfaces: true
+  logLevel: info
+  # SNI/Host sniffer (optional, off by default). Requires kernel modules:
+  #   iptables-mod-nfqueue (or xtables-addons), kmod-nfnetlink-queue,
+  #   kmod-ipt-nfqueue, kmod-nf-conntrack, kmod-xt-connbytes.
+  # On Ubuntu install via:
+  #   apt-get install iptables-mod-nfqueue xtables-addons-dkms
+  sniSniffer:
+    enabled: false
+    queueNum: 0
+    maxQueueLen: 1024
+    maxPacketLen: 65535
+    verdictTimeoutNs: 50000000
+    enableTLS: true
+    enableHTTP: true
+    enableHTTP2: true
+    allowedPorts:
+      - 443
+      - 80
+      - 8443
+    additionalTTL: 3600
+groups:
+  - id: d663876a
+    name: Example
+    interface: nwg0
+    enable: false
+    rules:
+      - id: 6f34ee91
+        name: Wildcard Example
+        type: wildcard
+        rule: '*wildcard.example.com'
+        enable: true
+      - id: 00ae5f7c
+        name: RegEx Example
+        type: regex
+        rule: '^.*.regex.example.com$'
+        enable: true
+      - id: 6120dc8a
+        name: Domain Example
+        type: domain
+        rule: 'domain.example.com'
+        enable: true
+      - id: b9751782
+        name: Namespace Example
+        type: namespace
+        rule: 'namespace.example.com'
+        enable: true

@@ -34,6 +34,24 @@ app:
     - br-lan
   showAllInterfaces: false
   logLevel: info
+  # SNI/Host sniffer (optional, off by default). Requires kernel modules
+  # (auto-pulled as package Depends):
+  #   kmod-nfnetlink, kmod-nfnetlink-queue, kmod-ipt-nfqueue,
+  #   kmod-nf-conntrack
+  sniSniffer:
+    enabled: false
+    queueNum: 0
+    maxQueueLen: 1024
+    maxPacketLen: 65535
+    verdictTimeoutNs: 50000000
+    enableTLS: true
+    enableHTTP: true
+    enableHTTP2: true
+    allowedPorts:
+      - 443
+      - 80
+      - 8443
+    additionalTTL: 3600
 groups:
   - id: d663876a
     name: Example

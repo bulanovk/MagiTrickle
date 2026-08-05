@@ -27,6 +27,20 @@ type Records struct {
 
 	// Обратный индекс: alias → []domains, которые на него ссылаются
 	reverseAliases map[string][]string
+
+	// Последнее наблюдение SNI-снифера: dst IP → (domain, when).
+	// Используется для логирования disagreement между SNI и DNS,
+	// а позже для GET /sniffer/recent. Один IP — одно наблюдение;
+	// повторный sniff перезаписывает предыдущее.
+	sniObservations map[string]sniObservation
+}
+
+// sniObservation is a single (domain, time) pair recorded by the
+// SNI sniffer. The IP key lives in Records.sniObservations; we only
+// store the most recent observation per IP.
+type sniObservation struct {
+	Domain   string
+	Observed time.Time
 }
 
 func (r *Records) AddAlias(domainName, alias string, ttl uint32) {
@@ -203,6 +217,79 @@ func (r *Records) cleanupRecords() {
 			delete(r.aliases, name)
 		}
 	}
+
+	// Очистка SNI-наблюдений старше SNIObservationTTL.
+	for ip, obs := range r.sniObservations {
+		if now.Sub(obs.Observed) > SNIObservationTTL {
+			delete(r.sniObservations, ip)
+		}
+	}
+}
+
+// SNIObservationTTL is how long an SNI observation lives in the
+// records cache before being purged. Chosen equal to the DNS path's
+// default additional TTL (1 hour) so disagreement detection has the
+// same temporal horizon as DNS records.
+const SNIObservationTTL = 1 * time.Hour
+
+// ObserveSNI records the most recent (domain, now) pair for the
+// given destination IP. Calling ObserveSNI twice with the same IP
+// overwrites the previous observation — only the latest matters for
+// disagreement detection.
+func (r *Records) ObserveSNI(ip string, domain string) {
+	if ip == "" || domain == "" {
+		return
+	}
+	r.locker.Lock()
+	defer r.locker.Unlock()
+	r.sniObservations[ip] = sniObservation{
+		Domain:   domain,
+		Observed: time.Now(),
+	}
+}
+
+// LastSNIDomain returns the most recent SNI observation for the IP
+// and whether one exists. The boolean is false when no observation
+// has been recorded (or it has been purged).
+func (r *Records) LastSNIDomain(ip string) (string, bool) {
+	r.locker.RLock()
+	defer r.locker.RUnlock()
+	obs, ok := r.sniObservations[ip]
+	if !ok {
+		return "", false
+	}
+	return obs.Domain, true
+}
+
+// ListSNIObservations returns a snapshot of all live SNI observations
+// for the upcoming /sniffer/recent API. The returned slice is a copy
+// — callers may mutate it freely.
+func (r *Records) ListSNIObservations() []SNIObservation {
+	r.locker.RLock()
+	defer r.locker.RUnlock()
+	out := make([]SNIObservation, 0, len(r.sniObservations))
+	now := time.Now()
+	for ip, obs := range r.sniObservations {
+		if now.Sub(obs.Observed) > SNIObservationTTL {
+			continue
+		}
+		out = append(out, SNIObservation{
+			IP:        ip,
+			Domain:    obs.Domain,
+			Observed:  obs.Observed,
+			ExpiresIn: SNIObservationTTL - now.Sub(obs.Observed),
+		})
+	}
+	return out
+}
+
+// SNIObservation is the public view of a single SNI observation,
+// returned by ListSNIObservations.
+type SNIObservation struct {
+	IP        string
+	Domain    string
+	Observed  time.Time
+	ExpiresIn time.Duration
 }
 
 // StartCleanup запускает фоновую очистку с заданным интервалом
@@ -224,8 +311,9 @@ func (r *Records) StartCleanup(ctx context.Context, interval time.Duration) {
 
 func New() *Records {
 	return &Records{
-		addresses:      make(map[string][]*Address),
-		aliases:        make(map[string]*Alias),
-		reverseAliases: make(map[string][]string),
+		addresses:       make(map[string][]*Address),
+		aliases:         make(map[string]*Alias),
+		reverseAliases:  make(map[string][]string),
+		sniObservations: make(map[string]sniObservation),
 	}
 }

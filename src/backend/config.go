@@ -101,6 +101,26 @@ func (a *App) LoadConfig() error {
 			applyIfSet(&a.config.Netfilter.StartMarkTableIndex, cfg.App.Netfilter.StartMarkTableIndex)
 		}
 
+		if cfg.App.SNISniffer != nil {
+			s := cfg.App.SNISniffer
+			applyIfSet(&a.config.SNISniffer.Enabled, s.Enabled)
+			applyIfSet(&a.config.SNISniffer.QueueNum, s.QueueNum)
+			applyIfSet(&a.config.SNISniffer.MaxQueueLen, s.MaxQueueLen)
+			applyIfSet(&a.config.SNISniffer.MaxPacketLen, s.MaxPacketLen)
+			applyIfSet(&a.config.SNISniffer.EnableTLS, s.EnableTLS)
+			applyIfSet(&a.config.SNISniffer.EnableHTTP, s.EnableHTTP)
+			applyIfSet(&a.config.SNISniffer.EnableHTTP2, s.EnableHTTP2)
+			applyIfSet(&a.config.SNISniffer.AllowedPorts, s.AllowedPorts)
+			applyIfSet(&a.config.SNISniffer.LogDNSMismatch, s.LogDNSMismatch)
+			if s.AdditionalTTL != nil {
+				t := *s.AdditionalTTL
+				if t < time.Second {
+					t *= time.Second
+				}
+				a.config.SNISniffer.AdditionalTTL = t
+			}
+		}
+
 		applyIfSet(&a.config.Link, cfg.App.Link)
 		applyIfSet(&a.config.ShowAllInterfaces, cfg.App.ShowAllInterfaces)
 		applyIfSet(&a.config.LogLevel, cfg.App.LogLevel)
@@ -192,6 +212,18 @@ func (a *App) SaveConfig() error {
 				DisableIPv4:         &a.config.Netfilter.DisableIPv4,
 				DisableIPv6:         &a.config.Netfilter.DisableIPv6,
 				StartMarkTableIndex: &a.config.Netfilter.StartMarkTableIndex,
+			},
+			SNISniffer: &config.SNISniffer{
+				Enabled:        &a.config.SNISniffer.Enabled,
+				QueueNum:       &a.config.SNISniffer.QueueNum,
+				MaxQueueLen:    &a.config.SNISniffer.MaxQueueLen,
+				MaxPacketLen:   &a.config.SNISniffer.MaxPacketLen,
+				EnableTLS:      &a.config.SNISniffer.EnableTLS,
+				EnableHTTP:     &a.config.SNISniffer.EnableHTTP,
+				EnableHTTP2:    &a.config.SNISniffer.EnableHTTP2,
+				AllowedPorts:   &a.config.SNISniffer.AllowedPorts,
+				AdditionalTTL:  &a.config.SNISniffer.AdditionalTTL,
+				LogDNSMismatch: &a.config.SNISniffer.LogDNSMismatch,
 			},
 			Link:              &a.config.Link,
 			ShowAllInterfaces: &a.config.ShowAllInterfaces,

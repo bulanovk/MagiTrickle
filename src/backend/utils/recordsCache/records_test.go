@@ -316,3 +316,64 @@ func TestGetAliasesUnknownDomain(t *testing.T) {
 		t.Fatal("unknown domain should return only itself")
 	}
 }
+
+func TestObserveSNI_RecordsLatestPerIP(t *testing.T) {
+	r := New()
+	r.ObserveSNI("1.2.3.4", "first.example.com")
+	r.ObserveSNI("1.2.3.4", "second.example.com")
+
+	got, ok := r.LastSNIDomain("1.2.3.4")
+	if !ok {
+		t.Fatal("expected observation to be recorded")
+	}
+	if got != "second.example.com" {
+		t.Errorf("LastSNIDomain = %q, want second.example.com", got)
+	}
+}
+
+func TestObserveSNI_MissingReturnsFalse(t *testing.T) {
+	r := New()
+	if _, ok := r.LastSNIDomain("9.9.9.9"); ok {
+		t.Error("expected ok=false for unrecorded IP")
+	}
+}
+
+func TestObserveSNI_IgnoresEmptyArgs(t *testing.T) {
+	r := New()
+	r.ObserveSNI("", "x")
+	r.ObserveSNI("1.1.1.1", "")
+	if got := r.ListSNIObservations(); len(got) != 0 {
+		t.Errorf("empty args should not record anything, got %v", got)
+	}
+}
+
+func TestListSNIObservations_PurgesExpired(t *testing.T) {
+	r := New()
+	r.ObserveSNI("1.1.1.1", "old.example.com")
+	// Rewind observation beyond TTL so cleanupRecords drops it.
+	r.sniObservations["1.1.1.1"] = sniObservation{
+		Domain:   "old.example.com",
+		Observed: time.Now().Add(-2 * SNIObservationTTL),
+	}
+	r.cleanupRecords()
+	if got := r.ListSNIObservations(); len(got) != 0 {
+		t.Errorf("expected expired entry to be purged, got %v", got)
+	}
+}
+
+func TestListSNIObservations_SnapshotIsCopy(t *testing.T) {
+	r := New()
+	r.ObserveSNI("1.1.1.1", "a.example.com")
+	r.ObserveSNI("2.2.2.2", "b.example.com")
+	got := r.ListSNIObservations()
+	if len(got) != 2 {
+		t.Fatalf("ListSNIObservations returned %d entries, want 2", len(got))
+	}
+	got[0].Domain = "mutated"
+	again := r.ListSNIObservations()
+	for _, e := range again {
+		if e.Domain == "mutated" {
+			t.Errorf("mutating returned slice affected internal state")
+		}
+	}
+}

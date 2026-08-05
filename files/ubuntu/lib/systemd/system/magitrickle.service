@@ -1,0 +1,21 @@
+[Unit]
+Description=MagiTrickle DNS-based traffic routing
+Documentation=https://magitrickle.dev
+After=network-online.target nss-lookup.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/magitrickled
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65536
+
+# MagiTrickle manipulates iptables/ipset and subscribes to netlink events,
+# so it requires network administration capabilities even when run unprivileged.
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

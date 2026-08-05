@@ -1,0 +1,80 @@
+# MagiTrickle test stand — one router + one client.
+#
+#   router  — magitrickled with SNI sniffer + DNS-MITM. Runs in the host
+#             network namespace because the kernel's nfnetlink_queue
+#             subsystem lives in init_net; bridge networking would fail
+#             the netlink bind with ENODEV. The container is privileged
+#             and MASQUERADEs outbound traffic on the host's primary
+#             egress so the sniffer sees real internet-bound packets.
+#   client  — nicolaka/netshoot. Sends DNS, DoH, and raw TLS traffic
+#             that crosses the router's iptables rules and the NFQUEUE
+#             hook. Talks to the router via the mt-net bridge gateway
+#             (= host's IP on that bridge = the host-network router).
+#
+# Usage:
+#   docker compose build
+#   docker compose up -d
+#   open http://127.0.0.1:8080                              # WebUI
+#   curl -k --resolve example.com:443:127.0.0.1 https://example.com/
+#   docker compose exec client bash
+#     client$ test-dns     # DNS-MITM scenario
+#     client$ test-doh     # DoH + HTTPS scenario (SNI path)
+#     client$ test-tls     # direct HTTPS to known sniffer targets (TLS)
+#     client$ test-http    # direct HTTP/1.1 to sniffer targets
+#     client$ test-http2   # direct HTTP/2 h2c to sniffer targets
+#     client$ stress-sni -mode burst -workers 20 -duration 30s
+#   docker compose exec router dump-sni                    # sniffer state
+
+networks:
+  mt-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+          gateway: 172.31.0.1
+
+services:
+  router:
+    build:
+      context: ..
+      dockerfile: testenv/router/Dockerfile.standalone
+    image: magitrickle-e2e:latest
+    container_name: mt-router
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # Host network — required for NFQUEUE access. Per-container sysctls
+    # are ignored in host mode, so ip_forward is set inside entrypoint.sh.
+    network_mode: host
+    ports:
+      - "8080:8080"   # WebUI + HTTP API
+      - "443:443"     # HTTPS for SNI inspection
+    volumes:
+      - ./router/entrypoint.sh:/entrypoint.sh:ro
+      - ./router/config.yaml:/var/lib/magitrickle/config.yaml:ro
+      - ./router/dump-sni.sh:/usr/local/bin/dump-sni:ro
+      - ./router/ipset-inspect.sh:/usr/local/bin/ipset-inspect:ro
+      - ../src/frontend/dist:/usr/share/magitrickle/skins/default:ro
+    command: ["bash", "/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/groups"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  client:
+    build:
+      context: ./client
+    container_name: mt-client
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      router:
+        condition: service_healthy
+    networks:
+      mt-net:
+        ipv4_address: 172.31.0.11
+    stdin_open: true
+    tty: true
+    command: ["bash", "-lc", "/usr/local/bin/rc.local; echo 'MT-client ready'; exec bash"]

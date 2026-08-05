@@ -1,4 +1,4 @@
-//go:build !entware_kn
+//go:build !entware_kn && !ubuntu
 
 package constant
 

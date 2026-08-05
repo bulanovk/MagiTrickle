@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"magitrickle/api"
+	"magitrickle/sniffer"
 	"magitrickle/utils/dnsMITMProxy"
 	"magitrickle/utils/iptables"
 	"magitrickle/utils/netfilterTools"
 	"magitrickle/utils/recordsCache"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )
@@ -60,6 +62,54 @@ func (a *App) Start(ctx context.Context) (err error) {
 	}
 	a.nfHelper = nfh
 
+	// SNI sniffer kernel probe. The sniffer itself is started later in
+	// Start(); here we only verify that the kernel has the modules it
+	// needs so we can log a useful message before any rules are installed.
+	probe := sniffer.ProbeKernelModules()
+	sniEnabled := a.config.SNISniffer.Enabled && probe.Available
+	if a.config.SNISniffer.Enabled {
+		if probe.Available {
+			log.Info().
+				Bool("nfqueue", probe.NFQueue).
+				Bool("ipset", probe.IPSet).
+				Bool("conntrack", probe.Conntrack).
+				Msg("SNI sniffer: probe OK")
+
+			a.sniRules = nfh.SNIRules(a.config.SNISniffer.QueueNum, a.config.SNISniffer.AllowedPorts)
+			if err := a.sniRules.Enable(); err != nil {
+				log.Warn().Err(err).Msg("SNI sniffer: failed to install MT_SNI chain; falling back to disabled")
+				sniEnabled = false
+				a.sniRules = nil
+			} else {
+				defer func() { _ = a.sniRules.Disable() }()
+			}
+		} else {
+			log.Warn().
+				Bool("nfqueue", probe.NFQueue).
+				Bool("ipset", probe.IPSet).
+				Bool("conntrack", probe.Conntrack).
+				Msg("SNI sniffer: required kernel modules missing; sniffer disabled")
+		}
+	} else if probe.Available {
+		log.Debug().
+			Msg("SNI sniffer: feature disabled in config")
+	}
+	// Build the sniffer (NoOp on non-Linux, on missing modules, or
+	// when disabled). The actual Start() is launched as a background
+	// goroutine after newCtx exists so cancellation flows through it.
+	a.sniffer = sniffer.New(sniffer.Config{
+		Enabled:       sniEnabled,
+		QueueNum:      a.config.SNISniffer.QueueNum,
+		MaxQueueLen:   a.config.SNISniffer.MaxQueueLen,
+		MaxPacketLen:  a.config.SNISniffer.MaxPacketLen,
+		EnableTLS:     a.config.SNISniffer.EnableTLS,
+		EnableHTTP:    a.config.SNISniffer.EnableHTTP,
+		EnableHTTP2:   a.config.SNISniffer.EnableHTTP2,
+		AllowedPorts:  a.config.SNISniffer.AllowedPorts,
+		AdditionalTTL: a.config.SNISniffer.AdditionalTTL,
+	})
+	snifferHooks := newSNIMatcher(a)
+
 	for _, ipt := range []*iptables.IPTables{a.nfHelper.IPTables4, a.nfHelper.IPTables6} {
 		if ipt == nil {
 			continue
@@ -88,6 +138,19 @@ func (a *App) Start(ctx context.Context) (err error) {
 
 	newCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	if sniEnabled {
+		go func() {
+			if err := a.sniffer.Start(newCtx, snifferHooks); err != nil {
+				log.Warn().Err(err).Msg("SNI sniffer stopped with error")
+			}
+		}()
+		defer func() {
+			if err := a.sniffer.Stop(); err != nil {
+				log.Warn().Err(err).Msg("SNI sniffer stop")
+			}
+		}()
+	}
 	errChan := make(chan error)
 
 	httpServer, err := api.SetupHTTP(a, errChan)
@@ -105,16 +168,36 @@ func (a *App) Start(ctx context.Context) (err error) {
 	a.startDNSListeners(newCtx, errChan)
 
 	var interfaceAddrs []netlink.Addr
-	for _, linkName := range a.config.Link {
-		link, err := netlink.LinkByName(linkName)
+	if len(a.config.Link) == 0 {
+		// Fallback when no explicit link is configured (e.g. Ubuntu server/desktop):
+		// enumerate all non-loopback interfaces so port-remap still produces DNAT
+		// rules. On router platforms (OpenWrt/Entware), link is always set explicitly.
+		links, err := netlink.LinkList()
 		if err != nil {
-			return fmt.Errorf("failed to find link %s: %w", linkName, err)
+			return fmt.Errorf("failed to list links: %w", err)
 		}
-		linkAddrList, err := netlink.AddrList(link, nl.FAMILY_ALL)
-		if err != nil {
-			return fmt.Errorf("failed to list address of interface %s: %w", linkName, err)
+		for _, link := range links {
+			if link.Attrs().Name == "lo" {
+				continue
+			}
+			addrs, err := netlink.AddrList(link, nl.FAMILY_ALL)
+			if err != nil {
+				continue
+			}
+			interfaceAddrs = append(interfaceAddrs, addrs...)
 		}
-		interfaceAddrs = append(interfaceAddrs, linkAddrList...)
+	} else {
+		for _, linkName := range a.config.Link {
+			link, err := netlink.LinkByName(linkName)
+			if err != nil {
+				return fmt.Errorf("failed to find link %s: %w", linkName, err)
+			}
+			linkAddrList, err := netlink.AddrList(link, nl.FAMILY_ALL)
+			if err != nil {
+				return fmt.Errorf("failed to list address of interface %s: %w", linkName, err)
+			}
+			interfaceAddrs = append(interfaceAddrs, linkAddrList...)
+		}
 	}
 
 	if !a.config.DNSProxy.DisableRemap53 {

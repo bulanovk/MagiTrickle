@@ -10,4 +10,9 @@ const (
 	SockPath     = "/opt/var/run/magitrickle.sock"
 	PasswdFile   = "/opt/etc/passwd"
 	ShadowFile   = "/opt/etc/shadow"
+
+	DefaultDNSUpstreamAddress = "127.0.0.1"
+	DefaultDNSUpstreamPort    = 53
+
+	DefaultShowAllInterfaces = false
 )

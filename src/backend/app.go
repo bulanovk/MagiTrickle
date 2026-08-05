@@ -11,6 +11,7 @@ import (
 	groupruntime "magitrickle/groups"
 	"magitrickle/internal/interfaces"
 	"magitrickle/models"
+	"magitrickle/sniffer"
 	"magitrickle/utils/dnsMITMProxy"
 	"magitrickle/utils/intID"
 	"magitrickle/utils/netfilterTools"
@@ -37,11 +38,13 @@ type App struct {
 
 	dnsMITM              *dnsMITMProxy.DNSMITMProxy
 	nfHelper             *netfilterTools.Helper
+	sniRules             *netfilterTools.SNIRules
 	recordsCache         *recordsCache.Records
 	userRuleSets         []*RuleSet
 	subscriptionRuleSets []*RuleSet
 	dnsOverrider         *netfilterTools.PortRemap
 	subscriptions        []*models.Subscription
+	sniffer              sniffer.Sniffer
 }
 
 // New создаёт новый экземпляр App
@@ -239,6 +242,54 @@ func (a *App) ListInterfaces() ([]models.InterfaceInfo, error) {
 // DnsOverrider возвращает dnsOverrider
 func (a *App) DnsOverrider() *netfilterTools.PortRemap {
 	return a.dnsOverrider
+}
+
+// SNISnifferStats returns a snapshot of the live sniffer counters.
+// Returns an error when the sniffer is the NoOp stub (i.e. sniffer
+// not enabled or kernel modules missing) — the API then renders the
+// UI with Active=false.
+func (a *App) SNISnifferStats() (sniffer.Stats, error) {
+	if a.sniffer == nil {
+		return sniffer.Stats{}, errors.New("sniffer not initialised")
+	}
+	stats := a.sniffer.Stats()
+	if !stats.Active {
+		return stats, errors.New("sniffer is a no-op stub")
+	}
+	return stats, nil
+}
+
+// SNISnifferRecent returns the most recent SNI observations up to
+// the given limit. A non-positive limit returns the entire list.
+func (a *App) SNISnifferRecent(limit int) ([]recordsCache.SNIObservation, error) {
+	if a.recordsCache == nil {
+		return nil, errors.New("records cache not initialised")
+	}
+	all := a.recordsCache.ListSNIObservations()
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
+	}
+	return all, nil
+}
+
+// SNISnifferConfig returns the live runtime sniffer configuration.
+func (a *App) SNISnifferConfig() models.AppConfigSNISniffer {
+	return a.config.SNISniffer
+}
+
+// SetSNISnifferConfig replaces the runtime sniffer configuration.
+// When save is true the new value is also persisted to disk.
+// Rebuilding the sniffer (Enable/Disable cycle) is intentionally not
+// done here — config changes take effect on the next MagiTrickle
+// restart. This mirrors how DNSProxy/LogLevel behave today.
+func (a *App) SetSNISnifferConfig(cfg models.AppConfigSNISniffer, save bool) error {
+	a.stateMu.Lock()
+	a.config.SNISniffer = cfg
+	a.stateMu.Unlock()
+	if save {
+		return a.SaveConfig()
+	}
+	return nil
 }
 
 func (a *App) ruleSetSnapshot() []*RuleSet {

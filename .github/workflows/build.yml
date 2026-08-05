@@ -71,7 +71,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y fakeroot upx meson ninja-build pkg-config libssl-dev zlib1g-dev libzstd-dev
+          sudo apt-get install -y fakeroot upx meson ninja-build pkg-config libssl-dev zlib1g-dev libzstd-dev dpkg-dev
 
       - name: Building apk-tools
         run: |
@@ -99,7 +99,7 @@ jobs:
         id: package_outputs
         run: |
           mapfile -t packages < <(
-            find .build -maxdepth 1 -type f \( -name "magitrickle_*.ipk" -o -name "magitrickle_*.apk" \) | sort
+            find .build -maxdepth 1 -type f \( -name "magitrickle_*.ipk" -o -name "magitrickle_*.apk" -o -name "magitrickle_*.deb" \) | sort
           )
 
           if [ "${#packages[@]}" -eq 0 ]; then
